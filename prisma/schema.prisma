@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ScenarioRunType {
+  deterministic
+  monte_carlo
+  historical
+}
+
+enum ScenarioRunStatus {
+  queued
+  running
+  complete
+  failed
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  password   PasswordCredential?
+  scenarios  Scenario[]
+  createdVersions ScenarioVersion[] @relation("ScenarioVersionCreatedBy")
+}
+
+model PasswordCredential {
+  userId       String  @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Scenario {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  archivedAt DateTime?
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions  ScenarioVersion[]
+
+  @@index([userId])
+}
+
+model ScenarioVersion {
+  id              String   @id @default(cuid())
+  scenarioId      String
+  versionNumber   Int
+  schemaVersion   Int
+  scenarioJson    Json
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("ScenarioVersionCreatedBy", fields: [createdByUserId], references: [id])
+  runs     ScenarioRun[]
+
+  @@index([scenarioId])
+  @@index([createdByUserId])
+  @@unique([scenarioId, versionNumber])
+}
+
+model ScenarioRun {
+  id                String            @id @default(cuid())
+  scenarioVersionId String
+  runType           ScenarioRunType
+  status            ScenarioRunStatus
+  seed              BigInt?
+  engineVersion     String
+  resultJson        Json?
+  errorText         String?
+  createdAt         DateTime @default(now())
+  completedAt       DateTime?
+
+  scenarioVersion ScenarioVersion @relation(fields: [scenarioVersionId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioVersionId])
+  @@index([runType, status])
+}
